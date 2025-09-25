@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm run typecheck:*)",
       "Bash(npm run dev:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(brew install:*)"
     ],
     "deny": [],
     "ask": []
