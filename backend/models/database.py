@@ -1,9 +1,7 @@
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Decimal, Text, ForeignKey, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from sqlalchemy.sql import func
-from datetime import datetime
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://coupon_user:secure_password@localhost:5432/coupon_db")
