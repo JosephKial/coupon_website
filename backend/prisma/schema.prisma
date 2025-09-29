@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  role         UserRole  @default(MEMBER)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  // Relations
+  coupons   Coupon[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Coupon {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code           String        @db.VarChar(100)
+  description    String?       @db.Text
+  discountType   DiscountType  @map("discount_type")
+  faceValue      Decimal       @map("face_value") @db.Decimal(10, 2)
+  expirationDate DateTime?     @map("expiration_date") @db.Date
+  usageLimit     Int?          @map("usage_limit")
+  usageCount     Int           @default(0) @map("usage_count")
+  status         CouponStatus  @default(ACTIVE)
+  tags           String[]      @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy   String @map("created_by") @db.Uuid
+  creator     User   @relation(fields: [createdBy], references: [id])
+
+  @@map("coupons")
+  @@index([code])
+  @@index([status])
+  @@index([expirationDate])
+  @@index([createdBy])
+  @@index([status, expirationDate])
+  @@index([status, faceValue])
+  @@index([discountType, faceValue])
+}
+
+model AuditLog {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action       String    @db.VarChar(50)
+  resourceType String    @map("resource_type") @db.VarChar(50)
+  resourceId   String?   @map("resource_id") @db.Uuid
+  details      Json?     @db.JsonB
+  ipAddress    String?   @map("ip_address") @db.Inet
+  userAgent    String?   @map("user_agent") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  userId String? @map("user_id") @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+
+  @@map("user_role")
+}
+
+enum DiscountType {
+  AMOUNT
+  PERCENTAGE
+
+  @@map("discount_type")
+}
+
+enum CouponStatus {
+  ACTIVE
+  EXPIRED
+  USED
+  DISABLED
+
+  @@map("coupon_status")
+}

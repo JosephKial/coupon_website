@@ -1,0 +1,1223 @@
+openapi: 3.0.3
+info:
+  title: Family Coupon Manager API
+  description: |
+    A secure, private web application API for managing family coupon codes. 
+    This API provides endpoints for user authentication, coupon management, 
+    search and filtering capabilities, and comprehensive audit logging.
+    
+    ## Authentication
+    This API uses JWT (JSON Web Tokens) for authentication. After successful login,
+    you'll receive an access token that must be included in the Authorization header
+    for protected endpoints.
+    
+    ## Rate Limiting
+    API endpoints are rate-limited to prevent abuse:
+    - Registration: 5 requests per 15 minutes per IP
+    - Login: 10 requests per 15 minutes per IP
+    - General API: 100 requests per 15 minutes per IP
+    
+    ## Error Handling
+    All errors follow a consistent format with appropriate HTTP status codes.
+    
+  version: 1.0.0
+  contact:
+    name: Family Coupon Manager
+    email: support@familycouponmanager.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Development server
+  - url: https://your-domain.com/api
+    description: Production server
+
+paths:
+  # Authentication Endpoints
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Create a new user account with email and password. 
+        Passwords are hashed using Argon2id for security.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid_registration:
+                summary: Valid registration
+                value:
+                  email: "john.doe@example.com"
+                  password: "SecurePass123!"
+                  firstName: "John"
+                  lastName: "Doe"
+                  role: "MEMBER"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              examples:
+                success:
+                  summary: Successful registration
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "john.doe@example.com"
+                        firstName: "John"
+                        lastName: "Doe"
+                        role: "MEMBER"
+                        isActive: true
+                        createdAt: "2024-01-15T10:30:00Z"
+                        updatedAt: "2024-01-15T10:30:00Z"
+                      message: "User registered successfully"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: |
+        Authenticate user with email and password. 
+        Returns access token and sets refresh token as httpOnly cookie.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valid_login:
+                summary: Valid login
+                value:
+                  email: "john.doe@example.com"
+                  password: "SecurePass123!"
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: Refresh token set as httpOnly cookie
+              schema:
+                type: string
+                example: "refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; HttpOnly; Secure; SameSite=Strict; Max-Age=604800"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                success:
+                  summary: Successful login
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "john.doe@example.com"
+                        firstName: "John"
+                        lastName: "Doe"
+                        role: "MEMBER"
+                        isActive: true
+                        createdAt: "2024-01-15T10:30:00Z"
+                        updatedAt: "2024-01-15T10:30:00Z"
+                        lastLoginAt: "2024-01-15T14:30:00Z"
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      message: "Login successful"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: |
+        Logout the authenticated user and invalidate refresh token.
+        Clears the refresh token cookie.
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful logout
+                  value:
+                    success: true
+                    data:
+                      message: "Logout successful"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Refresh the access token using the refresh token stored in httpOnly cookie.
+        Returns a new access token and refresh token.
+      operationId: refreshToken
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          headers:
+            Set-Cookie:
+              description: New refresh token set as httpOnly cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              examples:
+                success:
+                  summary: Successful token refresh
+                  value:
+                    success: true
+                    data:
+                      accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      message: "Tokens refreshed successfully"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/profile:
+    get:
+      tags:
+        - Authentication
+      summary: Get user profile
+      description: Get the authenticated user's profile information
+      operationId: getUserProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+              examples:
+                success:
+                  summary: User profile
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "john.doe@example.com"
+                        firstName: "John"
+                        lastName: "Doe"
+                        role: "MEMBER"
+                        isActive: true
+                        createdAt: "2024-01-15T10:30:00Z"
+                        updatedAt: "2024-01-15T10:30:00Z"
+                        lastLoginAt: "2024-01-15T14:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # Coupon Management Endpoints
+  /coupons:
+    get:
+      tags:
+        - Coupons
+      summary: Get coupons with filtering and pagination
+      description: |
+        Retrieve coupons with optional filtering, searching, and pagination.
+        Supports text search, status filtering, date ranges, and more.
+      operationId: getCoupons
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Text search across coupon codes and descriptions
+          schema:
+            type: string
+            example: "SAVE20"
+        - name: status
+          in: query
+          description: Filter by coupon status (can be multiple)
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/CouponStatus'
+            example: ["ACTIVE", "EXPIRED"]
+        - name: discountType
+          in: query
+          description: Filter by discount type (can be multiple)
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/DiscountType'
+            example: ["PERCENTAGE"]
+        - name: minValue
+          in: query
+          description: Minimum face value filter
+          schema:
+            type: number
+            minimum: 0
+            example: 10.00
+        - name: maxValue
+          in: query
+          description: Maximum face value filter
+          schema:
+            type: number
+            minimum: 0
+            example: 100.00
+        - name: expirationDateFrom
+          in: query
+          description: Filter coupons expiring from this date
+          schema:
+            type: string
+            format: date-time
+            example: "2024-01-01T00:00:00Z"
+        - name: expirationDateTo
+          in: query
+          description: Filter coupons expiring until this date
+          schema:
+            type: string
+            format: date-time
+            example: "2024-12-31T23:59:59Z"
+        - name: tags
+          in: query
+          description: Filter by tags (can be multiple)
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: ["grocery", "restaurant"]
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+        - name: sortBy
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [createdAt, updatedAt, expirationDate, faceValue, code]
+            default: createdAt
+            example: "createdAt"
+        - name: sortOrder
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+            example: "desc"
+      responses:
+        '200':
+          description: Coupons retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponsResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Coupons
+      summary: Create a new coupon
+      description: |
+        Create a new coupon with validation. The coupon will be associated 
+        with the authenticated user.
+      operationId: createCoupon
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCouponRequest'
+            examples:
+              percentage_coupon:
+                summary: Percentage discount coupon
+                value:
+                  code: "SAVE20"
+                  description: "20% off all items"
+                  discountType: "PERCENTAGE"
+                  faceValue: 20.00
+                  expirationDate: "2024-12-31T23:59:59Z"
+                  usageLimit: 100
+                  tags: ["general", "discount"]
+              amount_coupon:
+                summary: Fixed amount discount coupon
+                value:
+                  code: "SAVE10DOLLARS"
+                  description: "$10 off purchase"
+                  discountType: "AMOUNT"
+                  faceValue: 10.00
+                  expirationDate: "2024-06-30T23:59:59Z"
+                  tags: ["grocery"]
+      responses:
+        '201':
+          description: Coupon created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /coupons/stats:
+    get:
+      tags:
+        - Coupons
+      summary: Get coupon statistics
+      description: |
+        Get comprehensive statistics about the user's coupons including
+        counts by status, total savings, and expiration information.
+      operationId: getCouponStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Coupon statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponStatsResponse'
+              examples:
+                success:
+                  summary: Coupon statistics
+                  value:
+                    success: true
+                    data:
+                      totalCoupons: 45
+                      activeCoupons: 32
+                      expiredCoupons: 8
+                      usedCoupons: 3
+                      disabledCoupons: 2
+                      totalSavings: 1250.75
+                      averageValue: 27.79
+                      expiringThisWeek: 3
+                      expiringThisMonth: 12
+                    message: "Coupon statistics retrieved successfully"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /coupons/{id}:
+    get:
+      tags:
+        - Coupons
+      summary: Get a specific coupon
+      description: Retrieve details of a specific coupon by ID
+      operationId: getCouponById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Coupon ID
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Coupon retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleCouponResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags:
+        - Coupons
+      summary: Update a coupon
+      description: |
+        Update an existing coupon. Only the coupon owner can update their coupons.
+        All fields are optional in the update request.
+      operationId: updateCoupon
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Coupon ID
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCouponRequest'
+            examples:
+              update_status:
+                summary: Update coupon status
+                value:
+                  status: "DISABLED"
+              update_details:
+                summary: Update coupon details
+                value:
+                  description: "Updated description"
+                  faceValue: 25.00
+                  expirationDate: "2024-12-31T23:59:59Z"
+                  tags: ["updated", "sale"]
+      responses:
+        '200':
+          description: Coupon updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleCouponResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+    delete:
+      tags:
+        - Coupons
+      summary: Delete a coupon
+      description: |
+        Permanently delete a coupon. Only the coupon owner can delete their coupons.
+        This action cannot be undone.
+      operationId: deleteCoupon
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Coupon ID
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Coupon deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful deletion
+                  value:
+                    success: true
+                    message: "Coupon deleted successfully"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from login endpoint. 
+        Include in Authorization header as: `Bearer <token>`
+
+  schemas:
+    # User Schemas
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john.doe@example.com"
+        firstName:
+          type: string
+          description: User's first name
+          example: "John"
+        lastName:
+          type: string
+          description: User's last name
+          example: "Doe"
+        role:
+          $ref: '#/components/schemas/UserRole'
+        isActive:
+          type: boolean
+          description: Whether the user account is active
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last account update timestamp
+          example: "2024-01-15T10:30:00Z"
+        lastLoginAt:
+          type: string
+          format: date-time
+          description: Last login timestamp
+          example: "2024-01-15T14:30:00Z"
+          nullable: true
+
+    UserRole:
+      type: string
+      enum: [ADMIN, MEMBER]
+      description: User role in the system
+      example: "MEMBER"
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address
+          example: "john.doe@example.com"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]'
+          description: |
+            Password must contain at least:
+            - 8 characters
+            - One lowercase letter
+            - One uppercase letter  
+            - One number
+            - One special character (@$!%*?&)
+          example: "SecurePass123!"
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: User's first name
+          example: "John"
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: User's last name
+          example: "Doe"
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address
+          example: "john.doe@example.com"
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: User's password
+          example: "SecurePass123!"
+
+    # Coupon Schemas
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique coupon identifier
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        code:
+          type: string
+          description: Coupon code
+          example: "SAVE20"
+        description:
+          type: string
+          description: Coupon description
+          example: "20% off all items"
+          nullable: true
+        discountType:
+          $ref: '#/components/schemas/DiscountType'
+        faceValue:
+          type: number
+          format: decimal
+          description: Discount value (amount in dollars or percentage)
+          example: 20.00
+        expirationDate:
+          type: string
+          format: date-time
+          description: Coupon expiration date
+          example: "2024-12-31T23:59:59Z"
+          nullable: true
+        usageLimit:
+          type: integer
+          description: Maximum number of times coupon can be used
+          example: 100
+          nullable: true
+        usageCount:
+          type: integer
+          description: Number of times coupon has been used
+          example: 5
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        tags:
+          type: array
+          items:
+            type: string
+          description: Coupon tags for categorization
+          example: ["grocery", "discount"]
+        creator:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "123e4567-e89b-12d3-a456-426614174000"
+            firstName:
+              type: string
+              example: "John"
+            lastName:
+              type: string
+              example: "Doe"
+          description: User who created the coupon
+        createdAt:
+          type: string
+          format: date-time
+          description: Coupon creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last coupon update timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    DiscountType:
+      type: string
+      enum: [AMOUNT, PERCENTAGE]
+      description: Type of discount (fixed amount or percentage)
+      example: "PERCENTAGE"
+
+    CouponStatus:
+      type: string
+      enum: [ACTIVE, EXPIRED, USED, DISABLED]
+      description: Current status of the coupon
+      example: "ACTIVE"
+
+    CreateCouponRequest:
+      type: object
+      required:
+        - code
+        - discountType
+        - faceValue
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Za-z0-9\-_]+$'
+          description: Coupon code (letters, numbers, hyphens, underscores only)
+          example: "SAVE20"
+        description:
+          type: string
+          maxLength: 1000
+          description: Optional coupon description
+          example: "20% off all items"
+        discountType:
+          $ref: '#/components/schemas/DiscountType'
+        faceValue:
+          type: number
+          format: decimal
+          minimum: 0.01
+          maximum: 999999.99
+          description: Discount value (amount in dollars or percentage)
+          example: 20.00
+        expirationDate:
+          type: string
+          format: date-time
+          description: Optional expiration date (must be in the future)
+          example: "2024-12-31T23:59:59Z"
+        usageLimit:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          description: Optional usage limit
+          example: 100
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+          maxItems: 10
+          description: Optional tags for categorization (max 10)
+          example: ["grocery", "discount"]
+
+    UpdateCouponRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Za-z0-9\-_]+$'
+          description: Coupon code (letters, numbers, hyphens, underscores only)
+          example: "SAVE25"
+        description:
+          type: string
+          maxLength: 1000
+          description: Coupon description
+          example: "Updated description"
+        discountType:
+          $ref: '#/components/schemas/DiscountType'
+        faceValue:
+          type: number
+          format: decimal
+          minimum: 0.01
+          maximum: 999999.99
+          description: Discount value (amount in dollars or percentage)
+          example: 25.00
+        expirationDate:
+          type: string
+          format: date-time
+          description: Expiration date (null to remove)
+          example: "2024-12-31T23:59:59Z"
+          nullable: true
+        usageLimit:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          description: Usage limit (null to remove)
+          example: 200
+          nullable: true
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+          maxItems: 10
+          description: Tags for categorization (max 10)
+          example: ["updated", "sale"]
+
+    CouponStats:
+      type: object
+      properties:
+        totalCoupons:
+          type: integer
+          description: Total number of coupons
+          example: 45
+        activeCoupons:
+          type: integer
+          description: Number of active coupons
+          example: 32
+        expiredCoupons:
+          type: integer
+          description: Number of expired coupons
+          example: 8
+        usedCoupons:
+          type: integer
+          description: Number of used coupons
+          example: 3
+        disabledCoupons:
+          type: integer
+          description: Number of disabled coupons
+          example: 2
+        totalSavings:
+          type: number
+          format: decimal
+          description: Total potential savings from all coupons
+          example: 1250.75
+        averageValue:
+          type: number
+          format: decimal
+          description: Average coupon value
+          example: 27.79
+        expiringThisWeek:
+          type: integer
+          description: Number of coupons expiring this week
+          example: 3
+        expiringThisMonth:
+          type: integer
+          description: Number of coupons expiring this month
+          example: 12
+
+    # Response Schemas
+    RegisterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            message:
+              type: string
+              example: "User registered successfully"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            accessToken:
+              type: string
+              description: JWT access token (expires in 15 minutes)
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            message:
+              type: string
+              example: "Login successful"
+
+    RefreshResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              description: New JWT access token
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            message:
+              type: string
+              example: "Tokens refreshed successfully"
+
+    ProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+
+    CouponsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            coupons:
+              type: array
+              items:
+                $ref: '#/components/schemas/Coupon'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 20
+                total:
+                  type: integer
+                  example: 45
+                totalPages:
+                  type: integer
+                  example: 3
+                hasNext:
+                  type: boolean
+                  example: true
+                hasPrev:
+                  type: boolean
+                  example: false
+        message:
+          type: string
+          example: "Coupons retrieved successfully"
+
+    CouponResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Coupon'
+        message:
+          type: string
+          example: "Coupon created successfully"
+
+    SingleCouponResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Coupon'
+        message:
+          type: string
+          example: "Coupon retrieved successfully"
+
+    CouponStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/CouponStats'
+        message:
+          type: string
+          example: "Coupon statistics retrieved successfully"
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Operation completed successfully"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code for programmatic handling
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Validation failed"
+            details:
+              description: Additional error details (optional)
+              example: 
+                field: "email"
+                issue: "Invalid email format"
+            timestamp:
+              type: string
+              format: date-time
+              description: Error timestamp
+              example: "2024-01-15T10:30:00Z"
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation_error:
+              summary: Validation error
+              value:
+                success: false
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Validation failed"
+                  details:
+                    field: "email"
+                    issue: "Invalid email format"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+    UnauthorizedError:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthorized:
+              summary: Unauthorized access
+              value:
+                success: false
+                error:
+                  code: "UNAUTHORIZED"
+                  message: "Authentication required"
+                  timestamp: "2024-01-15T10:30:00Z"
+            invalid_token:
+              summary: Invalid token
+              value:
+                success: false
+                error:
+                  code: "INVALID_TOKEN"
+                  message: "Invalid or expired token"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+    ForbiddenError:
+      description: Access forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            forbidden:
+              summary: Access forbidden
+              value:
+                success: false
+                error:
+                  code: "FORBIDDEN"
+                  message: "Access denied - insufficient permissions"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            not_found:
+              summary: Resource not found
+              value:
+                success: false
+                error:
+                  code: "NOT_FOUND"
+                  message: "Resource not found"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+    ConflictError:
+      description: Conflict - resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            conflict:
+              summary: Resource conflict
+              value:
+                success: false
+                error:
+                  code: "CONFLICT"
+                  message: "Resource already exists"
+                  details: "Email address already registered"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rate_limit:
+              summary: Rate limit exceeded
+              value:
+                success: false
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "Too many requests - please try again later"
+                  details: "Rate limit: 10 requests per 15 minutes"
+                  timestamp: "2024-01-15T10:30:00Z"
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Coupons
+    description: Coupon management operations

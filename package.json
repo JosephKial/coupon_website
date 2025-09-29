@@ -1,0 +1,36 @@
+{
+  "name": "family-coupon-manager",
+  "version": "1.0.0",
+  "description": "A secure, private web application for managing family coupon codes",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "docker-compose -f docker-compose.dev.yml up",
+    "dev:build": "docker-compose -f docker-compose.dev.yml up --build",
+    "dev:down": "docker-compose -f docker-compose.dev.yml down",
+    "frontend:dev": "npm run dev --workspace=frontend",
+    "backend:dev": "npm run dev --workspace=backend",
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "build:all": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "test:all": "npm run test --workspace=frontend && npm run test --workspace=backend"
+  },
+  "keywords": [
+    "coupon",
+    "manager",
+    "family",
+    "react",
+    "nodejs",
+    "typescript"
+  ],
+  "author": "Family Coupon Manager Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2"
+  }
+}
